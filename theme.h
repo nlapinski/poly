@@ -56,8 +56,8 @@ colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 1.00f);
 colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.80f, 0.80f, 0.80f, 1.00f);
 
 ImGuiStyle& style = ImGui::GetStyle();
-style.AntiAliasedLines=false;
-style.AntiAliasedFill=false;
+style.AntiAliasedLines=true;
+style.AntiAliasedFill=true;
 style.FrameBorderSize = 1.0f;
 style.WindowRounding = 0.0f;
 

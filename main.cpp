@@ -20,6 +20,8 @@
     #include <sys/resource.h>
 #endif
 
+
+
 #include <string.h>
 #include <thread>
 #include <time.h>
@@ -154,14 +156,7 @@ static void ShowExampleAppConsole(bool* p_open, bool* reset)
         console6.CurrentFrame=0;
         console7.CurrentFrame=0;
         console8.CurrentFrame=0;
-        console1.IDX=0;
-        console2.IDX=0;
-        console3.IDX=0;
-        console4.IDX=0;
-        console5.IDX=0;
-        console6.IDX=0;
-        console7.IDX=0;
-        console8.IDX=0;
+
         *reset = false;
     }
 }

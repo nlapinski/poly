@@ -1,4 +1,5 @@
-rm -r bbt.exe
-rm -r main.o
+touch main.cpp
+
+rm bbt.exe
 make
 ./bbt.exe

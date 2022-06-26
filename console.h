@@ -11,7 +11,8 @@
 
 #include <chrono>
 #include "plf_nanotimer.h"
-
+#include "ring_counter.h"
+#include <vector>
 //global spi context
 extern mraa_spi_context spi;
 extern bool reset;
@@ -149,102 +150,7 @@ char *stristr4(const char *haystack, const char *needle) {
     return NULL;
 }
 
-/*
-void posix_nano(int microseconds){
-    struct timespec deadline;
-    clock_gettime(CLOCK_MONOTONIC, &deadline);
 
-    // Add the time you want to sleep
-    deadline.tv_nsec += microseconds*1000;
-
-    // Normalize the time to account for the second boundary
-    if(deadline.tv_nsec >= 1000000000) {
-       deadline.tv_nsec -= 1000000000;
-        deadline.tv_sec++;
-    }
-    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL);
-}
-
-
-void std_sleep_us(int microseconds)
-{
- 
-    bool sleep = true;
-    auto start = std::chrono::steady_clock::now();
-    while(sleep)
-    {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
-        if ( elapsed.count() > microseconds )
-            sleep = false;
-    }
-}
-*/
-
-
-void spi_task(int* ms, int* next_time,char* cmd, int *pin, char* ResultBuf, char* ResultValue, char* LastCommand, unsigned long long *CurrentFrame, float* adc1arr,float* adc2arr, double* imin, double* imax, double* omin, double* omax){
-    //int t = 0;
-    int IDX=0;
-    
-    //linux prioritiy
-    /*
-    struct sched_param sp;
-    sp.sched_priority = 90;
-    if(pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp)){
-        printf("WARNING: Failed to set bbt WORKER thread to real-time priority \n");
-    }
-    */
-    
-    double results = timer.get_elapsed_ns();
-    double end = results+((double)(*ms)*1.0);
-
-    while(true){
-        results = timer.get_elapsed_ns();
-    
-        if(results<end){
-            continue;
-        }
-        else{
-
-            *CurrentFrame+=1;
-            int t = (int)*CurrentFrame;
-            char temp_str[256];
-            strcpy(temp_str,LastCommand);
-            char time_str[256];
-            snprintf(time_str,256,"%d",t);
-            char replace[2] = "t";
-            char* result;
-            result = replace_str((char*)temp_str, (char*)replace, (char*)time_str);
-            //stringify(temp_str, replace, time_str);
-            uint8_t res = (uint8_t)calc((char*)result);
-            strcpy(ResultBuf,result);
-            double voltage = flt_map((double)res,*imin,*imax,*omin,*omax);
-            voltage = clamp(voltage,*omin,*omax);
-            uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
-            snprintf(ResultValue,256,"%6.2fv",voltage);
-
-            
-            
-
-            //}
-            IDX+=1;
-            if(IDX>200){
-                IDX=0;
-            }
-            adc1arr[IDX] = (float)((int)res*256);
-            adc2arr[IDX] = voltage;
-            *ms = *next_time;
-            //timer.start();
-            results = timer.get_elapsed_ns();
-            end = results+((double)(*ms)*1.0);
-
-            bool sucess = false; 
-            while(!sucess){
-                sucess = write_pin(spi,*pin,(int)(dac_voltage));
-            };
-        }
-    }
-}
 
 std::vector<double> split_args(char* args){
     std::vector <double> values;
@@ -288,14 +194,15 @@ struct ExampleAppConsole
     int                   Focused;
     bool                  init;
     double                LastTime;
-
     long long             cret;
-    calculator::stacks     cs;
-    calculator::operators  cb;
-   //pegtl::memory_input in( argv, "input" );
-   //pegtl::parse< calculator::grammar, calculator::action >( in, b, s );
-   //ret = (long long)s.finish();
-   //return ret;
+    calculator::stacks    cs;
+    calculator::operators cb;
+    unsigned int          steps;
+    unsigned int          div;
+    char                  pattern[256];
+    unsigned int          len;
+    std::vector<double>   pat_split;
+    unsigned int          mp;
 
     ExampleAppConsole()
     {
@@ -317,26 +224,21 @@ struct ExampleAppConsole
         ScrollToBottom = false;
         AddLog("CV calc");
         ExecCommand("calc (t*5)%256");
-        //ExecCommand("fit 0.0 256.0 -2.0 2.0");
         OMin =-10.0;
         OMax = 10.0;
         IMin =0.0;
         IMax = 256.0;
-        TimeMs = 4000.0;
+        TimeMs = 74000.0;
         Focused = 0;
         IDX=0;
-        //Worker = std::thread(spi_task, &TimeMs, &NextTimeMs,Cmd,&Pin, ResultBuf,ResultValue,LastCommand,&CurrentFrame, adc1arr,adc2arr, &IMin,&IMax,&OMin,&OMax);
-        //Worker.detach();
-        //sched_param sch;
-        //int policy; 
-        //pthread_getschedparam(Worker.native_handle(), &policy, &sch);
-        //sch.sched_priority = 0;
-        //if (pthread_setschedparam(Worker.native_handle(), SCHED_FIFO, &sch)) {
-         //   fprintf(stderr,"WARNING: Failed to set worker bbt thread"
-         //   "to real-time priority\n");
-        //  }
+        steps = 16;
+        div = 4;
+        len = 16;
+        for(int i =0;i<32;i++){
+            pat_split.push_back(0.0);    
+        }        
 
-        
+    
     }
     ~ExampleAppConsole()
     {
@@ -356,38 +258,37 @@ struct ExampleAppConsole
         if(results>LastTime){
             CurrentFrame+=1;
 
-            strcpy(ResultBuf,LastCommand);
-            //char time_str[256];
+            //strcpy(ResultBuf,pattern);
+            //char* time_str = mitoa(CurrentFrame, 10);
+            //char replace[2] = "t";
+            //char* result = replace_str((char*)ResultBuf, (char*)replace, (char*)time_str);
 
-            char* time_str = mitoa(CurrentFrame, 10);
+            //strcpy(ResultBuf,result);
+            //pegtl::memory_input in( ResultBuf, "input" );
+            //pegtl::parse< calculator::grammar, calculator::action >( in, cb, cs );
+            //uint8_t res = (uint8_t)cs.finish();
+            
+            //uint8_t inc = CurrentFrame % div;
 
-            char replace[2] = "t";
-            //stringify(ResultBuf, replace, time_str);        
-            char* result = replace_str((char*)ResultBuf, (char*)replace, (char*)time_str);
-            //char* result = replace_all((const char*)ResultBuf, (const char*)replace, (const char*)time_str);
+            if((CurrentFrame+1) % div == 0){
+                mp+=1;
+            }
+            if(mp>div-1){
+                mp=0;
+            }
 
-            strcpy(ResultBuf,result);
-            //return;
-            //uint8_t res = (uint8_t)calc(ResultBuf);
-            pegtl::memory_input in( ResultBuf, "input" );
-            pegtl::parse< calculator::grammar, calculator::action >( in, cb, cs );
-            uint8_t res = (uint8_t)cs.finish();
-            double voltage = flt_map((double)res,IMin,IMax,OMin,OMax);
+            //printf("pat %f \n",pat_split[inc]);
+            double voltage = flt_map((double)pat_split[mp],IMin,IMax,OMin,OMax);
 
             voltage = clamp(voltage,OMin,OMax);
             uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
-            snprintf(ResultValue,256,"%6.2fv",voltage);
-            //write_pin(spi,Pin,(int)(dac_voltage));
-            IDX+=1;
-            if(IDX>200){
-                IDX=0;
-            }
-            adc1arr[IDX] = (float)((int)res*256);
-            adc2arr[IDX] = voltage;
+            snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+
 
             LastTime = results+(TimeMs*1000);
 
             bool sucess = false; 
+
             while(!sucess){
                 sucess = write_pin(spi,Pin,(int)(dac_voltage));
             };
@@ -450,21 +351,37 @@ struct ExampleAppConsole
         if(!Focused){
             
             ImGui::BeginChild("graph", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
-            ImGui::Dummy(ImVec2(0.0f, 10.0f));
-            ImGui::PlotLines("ADC1", adc1arr, IM_ARRAYSIZE(adc1arr), 0, NULL, 0.0, 65535.0, ImVec2(256,120));
-            ImGui::Dummy(ImVec2(0.0f, 0.0f));
-            ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.90f, 0.72f, 1.00f));
-            ImGui::PlotLines("ADC2", adc2arr, IM_ARRAYSIZE(adc2arr), 0, NULL, -10.0, 10.0, ImVec2(256,120));
-            ImGui::PopStyleColor();
+            RingCounter(steps,CurrentFrame,div);
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));        
+            ImGui::Text("Pattern: %s", pattern); 
+            ImGui::Text("Value: %s | Time: %llu", ResultValue, CurrentFrame);
+            //ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            //ImGui::PlotLines("ADC1", adc1arr, IM_ARRAYSIZE(adc1arr), 0, NULL, 0.0, 65535.0, ImVec2(256,120));
+            //ImGui::Dummy(ImVec2(0.0f, 0.0f));
+            //ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.90f, 0.72f, 1.00f));
+            //ImGui::PlotLines("ADC2", adc2arr, IM_ARRAYSIZE(adc2arr), 0, NULL, -10.0, 10.0, ImVec2(256,120));
+            //ImGui::PopStyleColor();
             ImGui::EndChild();
+            
 
         }
 
         if(Focused){
-            ImGui::PlotLines("ADC1", adc1arr, IM_ARRAYSIZE(adc1arr), 0, NULL, 0.0, 65535.0, ImVec2(256,70));
-            ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.90f, 0.72f, 1.00f));
-            ImGui::PlotLines("ADC2", adc2arr, IM_ARRAYSIZE(adc2arr), 0, NULL, -10.0, 10.0, ImVec2(256,70));
-            ImGui::PopStyleColor();
+            //ImGui::PlotLines("ADC1", adc1arr, IM_ARRAYSIZE(adc1arr), 0, NULL, 0.0, 65535.0, ImVec2(256,70));
+            //ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.90f, 0.72f, 1.00f));
+            //ImGui::PlotLines("ADC2", adc2arr, IM_ARRAYSIZE(adc2arr), 0, NULL, -10.0, 10.0, ImVec2(256,70));
+            //ImGui::PopStyleColor();
+            
+
+            //ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+            //ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+            //vMin.x += ImGui::GetWindowPos().x;
+            //vMin.y += ImGui::GetWindowPos().y;
+            //vMax.x += ImGui::GetWindowPos().x;
+            //vMax.y += ImGui::GetWindowPos().y;
+
+            //ImGui::GetForegroundDrawList()->AddRect( vMin, vMax, IM_COL32( 0, 255, 128, 255 ) );
 
             // Reserve enough left-over height for 1 separator + 1 input text
             const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
@@ -587,6 +504,32 @@ struct ExampleAppConsole
             strcpy(LastCommand,command_line+5);
             AddLog("! set new expr %s", command_line+5);
         }
+        
+        else if (stristr4(command_line, "PAT") != NULL)
+        {
+            strcpy(pattern,command_line+4);
+            AddLog("! set new pattern %s", command_line+4);
+
+            pat_split.clear();
+            pat_split = split_args((char*)command_line+4);
+            
+
+            
+        }
+
+        else if (stristr4(command_line, "STEP") != NULL)
+        {
+            strcpy(LastCommand,command_line+5);
+            AddLog("! set new step length %s", command_line+5);
+            steps = atoi(command_line+5);
+        }
+            
+        else if (stristr4(command_line, "DIV") != NULL)
+        {
+            strcpy(LastCommand,command_line+4);
+            AddLog("! set new div %s", command_line+4);
+            div = atoi(command_line+4);
+        }
         else
         {
             AddLog("Unknown command: '%s'\n", command_line);
@@ -645,7 +588,7 @@ struct ExampleAppConsole
                 else
                 {
                     // Multiple matches. Complete as much as we can..
-                    // So inputing "C"+Tab will complete to "CL" then display "CLEAR" and "CLASSIFY" as matches.
+                    // So inputing "C"+Tab will complete to "CL" then display " " and "CLASSIFY" as matches.
                     int match_len = (int)(word_end - word_start);
                     for (;;)
                     {
