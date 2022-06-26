@@ -256,6 +256,26 @@ struct ExampleAppConsole
 
     void spi_update(double results){
     
+        double voltage = 0.0f;
+        if(perc){
+                                //printf("pat %f \n",pat_split[inc]);
+                voltage = flt_map((double)0.0f,IMin,IMax,OMin,OMax);
+
+                voltage = clamp(voltage,OMin,OMax);
+                uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
+                //snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+
+
+                bool sucess = false; 
+
+                while(!sucess){
+                    sucess = write_pin(spi,Pin,(int)(dac_voltage));
+                };
+                snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+                    
+                
+        }
+
         if(results>LastTime){
             CurrentFrame+=1;
 
@@ -263,6 +283,8 @@ struct ExampleAppConsole
             //char* time_str = mitoa(CurrentFrame, 10);
             //char replace[2] = "t";
             //char* result = replace_str((char*)ResultBuf, (char*)replace, (char*)time_str);
+            
+
 
             //strcpy(ResultBuf,result);
             //pegtl::memory_input in( ResultBuf, "input" );
@@ -270,13 +292,26 @@ struct ExampleAppConsole
             //uint8_t res = (uint8_t)cs.finish();            
             //uint8_t inc = CurrentFrame % div;
 
-            if((CurrentFrame+1) % div == 0){
+
+            //if((CurrentFrame+1) % div == 1){
+            //if(CurrentFrame%div==0){
+            
+
+            //if(Pin==0){
+                //printf("step %d \n", CurrentFrame%steps);
+                //printf("div %d \n", CurrentFrame%div);
+                //printf("div step  %d \n", CurrentFrame%div % CurrentFrame%steps);
+
+                //printf("seg %d  \n", (CurrentFrame%steps) % div);
+            //}
+
+            if( (CurrentFrame%steps) % div == 0){
                 mp+=1;
             
                 if(mp>div-1){
                     mp=0;
                 }
-                double voltage;
+                
                 //printf("pat %f \n",pat_split[inc]);
                 if(perc){
                     voltage = flt_map((double)255,IMin,IMax,OMin,OMax);
@@ -287,11 +322,7 @@ struct ExampleAppConsole
 
                 voltage = clamp(voltage,OMin,OMax);
                 uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
-                snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
-
-
                 
-
                 bool sucess = false; 
 
                 while(!sucess){
@@ -301,11 +332,11 @@ struct ExampleAppConsole
             else{
                 if(perc){
                                     //printf("pat %f \n",pat_split[inc]);
-                    double voltage = flt_map((double)0,IMin,IMax,OMin,OMax);
+                    voltage = flt_map((double)0.0f,IMin,IMax,OMin,OMax);
 
                     voltage = clamp(voltage,OMin,OMax);
                     uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
-                    snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+                    //snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
 
 
                     bool sucess = false; 
@@ -320,6 +351,7 @@ struct ExampleAppConsole
                 }
             }
             LastTime = results+(TimeMs*1000);
+            snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
         }
     }
 

@@ -20,15 +20,18 @@ void RingCounter(unsigned int segs, long long unsigned step, unsigned int div)
         draw_list->PushClipRectFullScreen();
         //_pie(center, RADIUS, col, 32);
         float wedge_angle = ((float)IM_PI*2.0) / (float)(segs);
-        float div_pad = 1.0/(float)segs;
-        for(unsigned int i = 1;i<segs+1;i++){
+
+        float div_pad = (IM_PI/1.5)/(float)segs;
+
+        for(unsigned int i = 0;i<segs;i++){
             
             float a_min = (i*wedge_angle)-div_pad;
-            float a_max = ((i-1)*wedge_angle)+div_pad;
+            float a_max = ((i)*wedge_angle)+div_pad;
             draw_list->PathArcTo(center, (float)RADIUS, a_min, a_max, num_segments);
-            if(step%segs==(i-1)){
+            if(step%segs==(i)){
                 if(i % div==0){
-                    draw_list->PathStroke(ImColor(colA),0,8.5f);        
+                    draw_list->PathStroke(ImColor(colA),0,8.5f);
+                    //trig = 1;        
                 }
                 else{
                     draw_list->PathStroke(ImColor(colD),0,6.5f);        
