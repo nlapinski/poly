@@ -203,7 +203,7 @@ struct ExampleAppConsole
     unsigned int          len;
     std::vector<double>   pat_split;
     unsigned int          mp;
-
+    bool                  perc;
     ExampleAppConsole()
     {
         init = true;
@@ -233,10 +233,11 @@ struct ExampleAppConsole
         IDX=0;
         steps = 16;
         div = 4;
-        len = 16;
-        for(int i =0;i<32;i++){
-            pat_split.push_back(0.0);    
+        
+        for(int i =0;i<64;i++){
+            pat_split.push_back(255.0);    
         }        
+        perc = true;
 
     
     }
@@ -266,32 +267,59 @@ struct ExampleAppConsole
             //strcpy(ResultBuf,result);
             //pegtl::memory_input in( ResultBuf, "input" );
             //pegtl::parse< calculator::grammar, calculator::action >( in, cb, cs );
-            //uint8_t res = (uint8_t)cs.finish();
-            
+            //uint8_t res = (uint8_t)cs.finish();            
             //uint8_t inc = CurrentFrame % div;
 
             if((CurrentFrame+1) % div == 0){
                 mp+=1;
+            
+                if(mp>div-1){
+                    mp=0;
+                }
+                double voltage;
+                //printf("pat %f \n",pat_split[inc]);
+                if(perc){
+                    voltage = flt_map((double)255,IMin,IMax,OMin,OMax);
+                }
+                else{
+                    voltage = flt_map((double)pat_split[mp],IMin,IMax,OMin,OMax);
+                }
+
+                voltage = clamp(voltage,OMin,OMax);
+                uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
+                snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+
+
+                
+
+                bool sucess = false; 
+
+                while(!sucess){
+                        sucess = write_pin(spi,Pin,(int)(dac_voltage));                
+                };
             }
-            if(mp>div-1){
-                mp=0;
+            else{
+                if(perc){
+                                    //printf("pat %f \n",pat_split[inc]);
+                    double voltage = flt_map((double)0,IMin,IMax,OMin,OMax);
+
+                    voltage = clamp(voltage,OMin,OMax);
+                    uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
+                    snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
+
+
+                    bool sucess = false; 
+
+                    while(!sucess){
+                        sucess = write_pin(spi,Pin,(int)(dac_voltage));
+
+                    };
+
+                        
+                    
+                }
             }
-
-            //printf("pat %f \n",pat_split[inc]);
-            double voltage = flt_map((double)pat_split[mp],IMin,IMax,OMin,OMax);
-
-            voltage = clamp(voltage,OMin,OMax);
-            uint32_t dac_voltage = int_map(clamp(voltage,-10,10),-10.0,10.0,0.0,65535.0);
-            snprintf(ResultValue,256,"%6.2fv | mp %d",voltage, mp);
-
-
             LastTime = results+(TimeMs*1000);
-
-            bool sucess = false; 
-
-            while(!sucess){
-                sucess = write_pin(spi,Pin,(int)(dac_voltage));
-            };
         }
     }
 
@@ -512,9 +540,17 @@ struct ExampleAppConsole
 
             pat_split.clear();
             pat_split = split_args((char*)command_line+4);
-            
+    
+        }
 
-            
+        else if (stristr4(command_line, "PERC") != NULL)
+        {
+            //strcpy(pattern,command_line+5);
+            AddLog("! switch to perc mode %s", command_line+5);
+
+
+            perc = !perc;
+    
         }
 
         else if (stristr4(command_line, "STEP") != NULL)
